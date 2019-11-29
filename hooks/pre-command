@@ -19,11 +19,31 @@ if [[ -n "${BUILDKITE_PLUGIN_CACHE_CACHE_KEY:-}" ]] ; then
   else
     cache_key=$BUILDKITE_PLUGIN_CACHE_CACHE_KEY
   fi
-
-  echo ":aws: :amazon-s3: sync ${cache_key}"
   
   bucket="${BUILDKITE_PLUGIN_CACHE_S3_BUCKET_NAME}/${BUILDKITE_ORGANIZATION_SLUG}/${BUILDKITE_PIPELINE_SLUG}/${cache_key}"
   
-  aws s3 sync "s3://${bucket}/" . --profile="${BUILDKITE_PLUGIN_CACHE_S3_PROFILE}"
+  paths=()
     
+  if [[ -n "${BUILDKITE_PLUGIN_CACHE_PATHS:-}" ]] ; then
+    paths+=("$BUILDKITE_PLUGIN_CACHE_PATHS")
+  fi
+  
+  while IFS='=' read -r path _ ; do
+    if [[ $path =~ ^(BUILDKITE_PLUGIN_CACHE_PATHS_[0-9]+) ]] ; then
+      paths+=("${!path}")
+    fi
+  done < <(env | sort)
+  
+  if [ "${#paths[@]}" -eq 1 ]; then
+
+    echo "--- :aws: :amazon-s3: sync ${paths[*]}"
+    aws s3 sync "s3://${bucket}/${paths[*]}/" "${paths[*]}" --profile="${BUILDKITE_PLUGIN_CACHE_S3_PROFILE}" --delete    
+
+  elif [ "${#paths[@]}" -gt 1 ]; then
+    for path in "${paths[@]}"
+      do
+        echo "--- :aws: :amazon-s3: sync ${path}"
+        aws s3 sync "s3://${bucket}/${path}/" "${path}" --profile="${BUILDKITE_PLUGIN_CACHE_S3_PROFILE}" --delete
+      done
+  fi  
 fi
